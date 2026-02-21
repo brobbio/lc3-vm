@@ -18,8 +18,11 @@ mod memory;
 mod vm;
 
 
+
+
 fn main() {
 
+    let vm = VM.new();
 
     //Load arguments
     let args: Vec<String> = env::args().collect()
@@ -49,11 +52,13 @@ fn main() {
 
     while (running) {
         u16 instruction = mem_read(Registers::R_PC);
-        U16 operation = instruction >> 12;
+        u16 operation = instruction >> 12;
 
         match operation 
             {
-                Opcodes::OP_ADD:
+                Opcodes::OP_ADD {
+
+                }
                     ////@{ADD}
                     break;
                 Opcodes::OP_AND:
