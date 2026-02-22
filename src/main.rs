@@ -14,6 +14,7 @@ use libc::{termios, tcgetattr, tcsetattr};
 use nix::sys::termios;
 
 
+
 mod memory;
 mod vm;
 
@@ -22,7 +23,9 @@ mod vm;
 
 fn main() {
 
-    let vm = VM.new();
+
+
+    let vm = VM::new();
 
     //Load arguments
     let args: Vec<String> = env::args().collect()
@@ -39,20 +42,12 @@ fn main() {
         }
     }
 
-    //Setup
-
-    Registers::R_COND = FL_ZRO;
-
-    /* set the PC to starting position */
-    /* 0x3000 is the default */
-    enum { PC_START = 0x3000 };
-    Registers::R_PC = PC_START;
 
     int running = true;
 
     while (running) {
-        u16 instruction = mem_read(Registers::R_PC);
-        u16 operation = instruction >> 12;
+        let instruction: u16 = mem_read(Registers::R_PC);
+        let operation: u16 = instruction >> 12;
 
         match operation 
             {
@@ -98,7 +93,7 @@ fn main() {
                     //@{STR}
                     break;
                 Opcodes::OP_TRAP:
-                    //@{TRAP}
+                    vm.execute_trap_routine();
                     break;
                 Opcodes::OP_RES:
                 Opcodes::OP_RTI:
