@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use super::*;
+    mod vm;
 
     #[test]
     fn test_mem_write_and_read() {
