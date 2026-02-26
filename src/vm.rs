@@ -158,7 +158,7 @@ impl VM {
         
     }
 
-    fn mem_write(&mut self, addr: u16, val: u16) {
+    pub fn mem_write(&mut self, addr: u16, val: u16) {
         self.mem[addr as usize] = val;
     }
 
@@ -285,7 +285,7 @@ impl VM {
 
     pub fn store(&mut self, instruction: u16) {
         let r0 = ((instruction >> 9) & 0x7) as usize;
-        let pc_offset: u16 = (sign_extend(instruction & 0x1FF, 9));
+        let pc_offset: u16 = sign_extend(instruction & 0x1FF, 9);
         self.mem_write(self.reg[Register::R_PC as usize].wrapping_add(pc_offset), self.reg[r0])
     }
 

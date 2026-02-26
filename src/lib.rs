@@ -1,7 +1,9 @@
+pub mod vm;
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    mod vm;
+    use crate::vm::VM;
 
     #[test]
     fn test_mem_write_and_read() {
