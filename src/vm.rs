@@ -279,7 +279,7 @@ impl VM {
 
         if long_flag != 0 {
             let long_offset: u16 = sign_extend(instruction & 0x7FF, 11);
-            self.reg[Register::PC as usize] = self.reg[Register::PC as usize] + long_offset; 
+            self.reg[Register::PC as usize] = self.reg[Register::PC as usize].wrapping_add(long_offset); 
         } else {
             let r1 = ((instruction >> 6) & 0x7) as usize;
             self.reg[Register::PC as usize] = self.reg[r1];
