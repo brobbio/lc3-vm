@@ -77,45 +77,46 @@ fn check_key() -> bool {
 
 #[derive(Debug, PartialEq, Eq)]
 #[repr(u16)]
+#[allow(dead_code)]
 pub enum Opcodes
 {
-    OP_BR = 0, /* branch */
-    OP_ADD = 1,    /* add  */
-    OP_LD = 2,     /* load */
-    OP_ST = 3,     /* store */
-    OP_JSR = 4,    /* jump register */
-    OP_AND = 5,    /* bitwise and */
-    OP_LDR = 6,    /* load register */
-    OP_STR = 7,    /* store register */
-    OP_RTI = 8,    /* unused */
-    OP_NOT = 9,    /* bitwise not */
-    OP_LDI = 10,    /* load indirect */
-    OP_STI = 11,    /* store indirect */
-    OP_JMP = 12,    /* jump */
-    OP_RES = 13,    /* reserved (unused) */
-    OP_LEA = 14,    /* load effective address */
-    OP_TRAP = 15   /* execute trap */
+    BR = 0, /* branch */
+    ADD = 1,    /* add  */
+    LD = 2,     /* load */
+    ST = 3,     /* store */
+    JSR = 4,    /* jump register */
+    AND = 5,    /* bitwise and */
+    LDR = 6,    /* load register */
+    STR = 7,    /* store register */
+    RTI = 8,    /* unused */
+    NOT = 9,    /* bitwise not */
+    LDI = 10,    /* load indirect */
+    STI = 11,    /* store indirect */
+    JMP = 12,    /* jump */
+    RES = 13,    /* reserved (unused) */
+    LEA = 14,    /* load effective address */
+    TRAP = 15   /* execute trap */
 }
 
 impl From<u16> for Opcodes {
     fn from(value: u16) -> Self {
         match value {
-            0 => Opcodes::OP_BR,
-            1 => Opcodes::OP_ADD,
-            2 => Opcodes::OP_LD,
-            3 => Opcodes::OP_ST,
-            4 => Opcodes::OP_JSR,
-            5 => Opcodes::OP_AND,
-            6 => Opcodes::OP_LDR,
-            7 => Opcodes::OP_STR,
-            8 => Opcodes::OP_RTI,
-            9 => Opcodes::OP_NOT,
-            10 => Opcodes::OP_LDI,
-            11 => Opcodes::OP_STI,
-            12 => Opcodes::OP_JMP,
-            13 => Opcodes::OP_RES,
-            14 => Opcodes::OP_LEA,
-            15 => Opcodes::OP_TRAP,
+            0 => Opcodes::BR,
+            1 => Opcodes::ADD,
+            2 => Opcodes::LD,
+            3 => Opcodes::ST,
+            4 => Opcodes::JSR,
+            5 => Opcodes::AND,
+            6 => Opcodes::LDR,
+            7 => Opcodes::STR,
+            8 => Opcodes::RTI,
+            9 => Opcodes::NOT,
+            10 => Opcodes::LDI,
+            11 => Opcodes::STI,
+            12 => Opcodes::JMP,
+            13 => Opcodes::RES,
+            14 => Opcodes::LEA,
+            15 => Opcodes::TRAP,
             _ => panic!("Invalid opcode"),
         }
     }
@@ -135,68 +136,74 @@ fn main() {
     vm.read_image(filename);
 
 
-    if args.len() < 2  {
+    if args.len() < 2 {
         println!("lc3 [image-file] ... \n");
         std::process::exit(2);
-    }
-
-    for i in 0..args.len()  {
-        if Some(vm.read_image(&args[i])).is_some()  {
-            println!("Failed to load image {}", args[i]);
-            std::process::exit(1);
-        }
     }
 
     vm.turn_on();
 
     while vm.is_running() {
-        let instruction: u16 = vm.mem_read(Register::R_PC as u16);
+
+        let curr_pc = vm.get_pc();
+        let instruction: u16 = vm.mem_read(curr_pc);
         let operation = Opcodes::from(instruction >> 12);
+        
+        vm.advance_pc();
+        // For debugging purposes:
+        // println!(
+        //     "PC: {:04X}  INSTR: {:04X}  OP: {:X}",
+        //     vm.get_pc(),
+        //     instruction,
+        //     instruction >> 12
+        // );
 
         match operation {
-            Opcodes::OP_ADD => {
+            Opcodes::ADD => {
                 vm.add(instruction);
             }
-            Opcodes::OP_AND => {
+            Opcodes::AND => {
                 vm.and(instruction);
             }
-            Opcodes::OP_NOT => {
+            Opcodes::NOT => {
                 vm.not(instruction);
             }
-            Opcodes::OP_BR => {
+            Opcodes::BR => {
                 vm.branch(instruction);
             }
-            Opcodes::OP_JMP => {
+            Opcodes::JMP => {
+                vm.jmp(instruction);
+            }
+            Opcodes::JSR => {
                 vm.jump(instruction);
             }
-            Opcodes::OP_JSR => {
-                vm.jump(instruction);
-            }
-            Opcodes::OP_LD => {
+            Opcodes::LD => {
                 vm.load(instruction);
             }
-            Opcodes::OP_LDI => {
+            Opcodes::LDI => {
                 vm.ldi(instruction);
             }
-            Opcodes::OP_LDR => {
+            Opcodes::LDR => {
                 vm.ldr(instruction);
             }
-            Opcodes::OP_LEA => {
+            Opcodes::LEA => {
                 vm.lea(instruction);
             }
-            Opcodes::OP_ST => {
+            Opcodes::ST => {
                 vm.store(instruction);
             }
-            Opcodes::OP_STI => {
+            Opcodes::STI => {
                 vm.store_indirect(instruction);
             }
-            Opcodes::OP_STR => {
+            Opcodes::STR => {
                 vm.store_register(instruction);
             }
-            Opcodes::OP_TRAP => {
+            Opcodes::TRAP => {
+                let curr_pc = vm.get_pc();
+                vm.set_reg(Register::R7 as usize, curr_pc);
                 vm.execute_trap_routine(instruction);
             }
-            Opcodes::OP_RES => {}
+            Opcodes::RES => {}
             _ => {
                 println!("Unknown operation code");
                 std::process::abort();
@@ -204,5 +211,5 @@ fn main() {
         }
 
         restore_input_buffering();
-    }
+}
 }

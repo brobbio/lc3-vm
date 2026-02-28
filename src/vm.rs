@@ -1,6 +1,5 @@
 use std::fs::File;
 use std::io::{self, Read, Write};
-use std::fmt;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -30,44 +29,45 @@ pub enum VMError {
 // }
 
 #[derive(Copy, Clone)]
+#[allow(dead_code)]
 pub enum Register
 {
-    R_R0 = 0,
-    R_R1 = 1,
-    R_R2 = 2,
-    R_R3 = 3,
-    R_R4 = 4,
-    R_R5 = 5,
-    R_R6 = 6,
-    R_R7 = 7,
-    R_PC = 8, /* program counter */
-    R_COND = 9,
-    R_COUNT = 10
+    R0 = 0,
+    R1 = 1,
+    R2 = 2,
+    R3 = 3,
+    R4 = 4,
+    R5 = 5,
+    R6 = 6,
+    R7 = 7,
+    PC = 8, /* program counter */
+    COND = 9,
+    COUNT = 10
 }
 
 const MR_KBSR: u16 = 0xFE00; // keyboard status
 const MR_KBDR: u16 = 0xFE02; // keyboard data
 
 #[repr(u16)]
-enum TRAP_CODES {
-    TRAP_GETC = 0x20,  /* get character from keyboard, not echoed onto the terminal */
-    TRAP_OUT = 0x21,   /* output a character */
-    TRAP_PUTS = 0x22,  /* output a word string */
-    TRAP_IN = 0x23,    /* get character from keyboard, echoed onto the terminal */
-    TRAP_PUTSP = 0x24, /* output a byte string */
-    TRAP_HALT = 0x25   /* halt the program */
+enum TrapCodes {
+    GETC = 0x20,  /* get character from keyboard, not echoed onto the terminal */
+    OUT = 0x21,   /* output a character */
+    PUTS = 0x22,  /* output a word string */
+    IN = 0x23,    /* get character from keyboard, echoed onto the terminal */
+    PUTSP = 0x24, /* output a byte string */
+    HALT = 0x25   /* halt the program */
 }
 
-impl From<u16> for TRAP_CODES {
+impl From<u16> for TrapCodes {
     fn from(value: u16) -> Self {
         match value {
-            0x20 => TRAP_CODES::TRAP_GETC,
-            0x21 => TRAP_CODES::TRAP_OUT,
-            0x22 => TRAP_CODES::TRAP_PUTS,
-            0x23 => TRAP_CODES::TRAP_IN,
-            0x24 => TRAP_CODES::TRAP_PUTSP,
-            0x25 => TRAP_CODES::TRAP_HALT,
-            _ => panic!("Invalid opcode"),
+            0x20 => TrapCodes::GETC,
+            0x21 => TrapCodes::OUT,
+            0x22 => TrapCodes::PUTS,
+            0x23 => TrapCodes::IN,
+            0x24 => TrapCodes::PUTSP,
+            0x25 => TrapCodes::HALT,
+            _ => panic!("Invalid opcode {}", value),
         }
     }
 }
@@ -78,17 +78,17 @@ const MEMORY_SIZE: usize = 2_usize.pow(16);
 #[repr(u16)]
 enum ConditionFlags
 {
-    FL_POS = 1 << 0, /* P */
-    FL_ZRO = 1 << 1, /* Z */
-    FL_NEG = 1 << 2, /* N */
+    FlPOS = 1 << 0, /* P */
+    FlZRO = 1 << 1, /* Z */
+    FlNEG = 1 << 2, /* N */
 }
 
 impl From<u16> for ConditionFlags {
     fn from(value: u16) -> Self {
         match value {
-            1 => ConditionFlags::FL_POS,
-            2 => ConditionFlags::FL_ZRO,
-            4 => ConditionFlags::FL_NEG,
+            1 => ConditionFlags::FlPOS,
+            2 => ConditionFlags::FlZRO,
+            4 => ConditionFlags::FlNEG,
             _ => panic!("Invalid conditional flag"),
         }
     }
@@ -117,11 +117,13 @@ impl VM {
         };
 
         //Setup
-        vm.set_reg(Register::R_PC as usize, PC_START);
+        vm.set_reg(Register::PC as usize, PC_START);
         /* set the PC to starting position */
         /* 0x3000 is the default */
             
-        vm.reg[Register::R_COND as usize] = ConditionFlags::FL_ZRO as u16;
+        vm.reg[Register::COND as usize] = ConditionFlags::FlZRO as u16;
+        //println!("{}", vm.reg[9]);
+        // println!("{}", vm.reg[..10]);
         vm
     }
 
@@ -134,13 +136,27 @@ impl VM {
         let mut buf = Vec::new();
         file.read_to_end(&mut buf)?;
     
-        let origin = u16::from_be_bytes([buf[0], buf[1]]) as usize;
+        let origin = u16::from_be_bytes([buf[0], buf[1]]);
+
     
         for (i, chunk) in buf[2..].chunks_exact(2).enumerate() {
-            self.mem[origin + i] = u16::from_be_bytes([chunk[0], chunk[1]]);
+            self.mem[origin.wrapping_add(i as u16) as usize] = u16::from_be_bytes([chunk[0], chunk[1]]);
         }
-    
+
+        // for (i, &value) in self.mem.iter().enumerate() {
+        //     if value != 0 {
+        //         println!("mem[0x{:04X}] = 0x{:04X}", i, value);
+        //     }
+        // }
         Ok(())
+    }
+
+    pub fn advance_pc(&mut self){
+        self.reg[Register::PC as usize] = self.reg[Register::PC as usize].wrapping_add(1);
+    }
+
+    pub fn get_pc(&mut self) -> u16 {
+        self.reg[Register::PC as usize]
     }
 
     pub fn mem_read(&mut self, addr: u16) -> u16 {
@@ -162,7 +178,7 @@ impl VM {
         self.mem[addr as usize] = val;
     }
 
-    pub fn reg(&mut self, id: usize) -> u16 {
+    pub fn read_reg(&mut self, id: usize) -> u16 {
         self.reg.get(id).copied().expect("Warning: value must be set")
     }
 
@@ -175,7 +191,7 @@ impl VM {
     }
 
     pub fn set_pc(&mut self, pc: u16) {
-        self.reg[Register::R_PC as usize] = pc;
+        self.reg[Register::PC as usize] = pc;
     }
 
     pub fn set_reg(&mut self, id: usize, value: u16) {
@@ -183,12 +199,13 @@ impl VM {
     }
 
     fn update_flags(&mut self, r: usize) {
+        // println!("I will update flag {}", r);
         if self.reg[r] == 0 {
-            self.reg[Register::R_COND as usize] = ConditionFlags::FL_ZRO as u16;
+            self.reg[Register::COND as usize] = ConditionFlags::FlZRO as u16;
         } else if self.reg[r] >> 15 != 0 {
-            self.reg[Register::R_COND as usize] = ConditionFlags::FL_NEG as u16;
+            self.reg[Register::COND as usize] = ConditionFlags::FlNEG as u16;
         } else {
-            self.reg[Register::R_COND as usize] = ConditionFlags::FL_POS as u16;
+            self.reg[Register::COND as usize] = ConditionFlags::FlPOS as u16;
         }
     }
 
@@ -211,7 +228,10 @@ impl VM {
         
         let pc_offset: u16 = sign_extend(instruction & 0x1FF, 9); // obtain the 9-bit offset sign-extended
 
-        self.reg[r0] = self.mem_read(self.reg[Register::R_PC as usize].wrapping_add(pc_offset));
+        let addr = self.mem_read(
+            self.reg[Register::PC as usize].wrapping_add(pc_offset)
+        );
+        self.reg[r0] = self.mem_read(addr);
         self.update_flags(r0);
     }
 
@@ -243,28 +263,33 @@ impl VM {
         let pc_offset: u16 = sign_extend(instruction & 0x1FF, 9);
         let cond_flag: u16 = (instruction >> 9) & 0x7;
 
-        if cond_flag & self.reg[Register::R_COND as usize] != 0 {
-            self.reg[Register::R_PC as usize] = self.reg[Register::R_PC as usize] + pc_offset;
+        if cond_flag & self.reg[Register::COND as usize] != 0 {
+            self.reg[Register::PC as usize] = self.reg[Register::PC as usize].wrapping_add(pc_offset);
         }
+    }
+
+    pub fn jmp(&mut self, instruction: u16) {
+        let r0: u16 = (instruction >> 6) & 0x7;
+        self.set_reg(Register::PC as usize, self.reg[r0 as usize]);
     }
 
     pub fn jump(&mut self, instruction: u16) {
         let long_flag: u16 = (instruction >> 11) & 1;
-        self.reg[Register::R_R7 as usize] = self.reg[Register::R_PC as usize];
+        self.reg[Register::R7 as usize] = self.reg[Register::PC as usize];
 
         if long_flag != 0 {
             let long_offset: u16 = sign_extend(instruction & 0x7FF, 11);
-            self.reg[Register::R_PC as usize] = self.reg[Register::R_PC as usize] + long_offset; 
+            self.reg[Register::PC as usize] = self.reg[Register::PC as usize] + long_offset; 
         } else {
             let r1 = ((instruction >> 6) & 0x7) as usize;
-            self.reg[Register::R_PC as usize] = self.reg[r1];
+            self.reg[Register::PC as usize] = self.reg[r1];
         }
     }
 
     pub fn load(&mut self, instruction: u16) {
         let r0 = ((instruction >> 9) & 0x7) as usize;
         let pc_offset: u16 = sign_extend(instruction & 0x1FF, 9);
-        self.reg[r0] = self.mem_read(self.reg[Register::R_PC as usize].wrapping_add(pc_offset));
+        self.reg[r0] = self.mem_read(self.reg[Register::PC as usize].wrapping_add(pc_offset));
         self.update_flags(r0);
     }
 
@@ -279,20 +304,20 @@ impl VM {
     pub fn lea(&mut self, instruction: u16) { // load effective address
         let r0: usize = ((instruction >> 9) & 0x7) as usize;
         let pc_offset: u16 = sign_extend(instruction & 0x1FF, 9);
-        self.reg[r0] = self.reg[Register::R_PC as usize] + pc_offset;
+        self.reg[r0] = self.reg[Register::PC as usize] + pc_offset;
         self.update_flags(r0); 
     }
 
     pub fn store(&mut self, instruction: u16) {
         let r0 = ((instruction >> 9) & 0x7) as usize;
         let pc_offset: u16 = sign_extend(instruction & 0x1FF, 9);
-        self.mem_write(self.reg[Register::R_PC as usize].wrapping_add(pc_offset), self.reg[r0])
+        self.mem_write(self.reg[Register::PC as usize].wrapping_add(pc_offset), self.reg[r0])
     }
 
     pub fn store_indirect(&mut self, instruction: u16) {
         let r0: usize = ((instruction >> 9) & 0x7) as usize;
         let pc_offset: u16 = sign_extend(instruction & 0x1FF, 9);
-        let indirect_addr = self.mem_read(self.reg[Register::R_PC as usize] + pc_offset);
+        let indirect_addr = self.mem_read(self.reg[Register::PC as usize] + pc_offset);
         self.mem_write(indirect_addr, self.reg[r0]);
     }
 
@@ -300,33 +325,35 @@ impl VM {
         let r0: usize = ((instruction >> 9) & 0x7) as usize;
         let r1: usize = ((instruction >> 6) & 0x7) as usize;
         let offset: u16 = sign_extend(instruction & 0x3F, 6);
-        self.mem_write(self.reg[r1] + offset, self.reg[r0]);
+        self.mem_write(self.reg[r1].wrapping_add(offset), self.reg[r0]);
     }
 
     pub fn execute_trap_routine(&mut self, instruction: u16) {
-        let operation = TRAP_CODES::from(instruction >> 12);
+        //self.reg[Register::R7 as usize] = self.reg[Register::PC as usize];
+        //println!("TRAP instruction: {:04X}", instruction);
+        let operation = TrapCodes::from(instruction & 0xFF);
         match operation {
-            TRAP_CODES::TRAP_HALT => {
+            TrapCodes::HALT => {
                 self.running = false;
             }
-            TRAP_CODES::TRAP_PUTS => {
+            TrapCodes::PUTS => {
                 let mut i = self.reg[0] as u16;
                 while self.mem_read(i) != 0x0000 {
                     let ch = self.mem_read(i) as u8;
                     print!("{}", ch as char);
-                    eprint!("{}", ch as char);
+                    //eprint!("{}", ch as char);
                     i += 1;
                 }
                 io::stdout()
                     .flush()
                     .unwrap_or_else(|_| panic!("{}", VMError::FlushFailed));
             }
-            TRAP_CODES::TRAP_OUT => {
-                let ch = self.reg[Register::R_R0 as usize] as u8 as char;
+            TrapCodes::OUT => {
+                let ch = self.reg[Register::R0 as usize] as u8 as char;
                 print!("{}", ch);
                 io::stdout().flush().unwrap();
             }
-            TRAP_CODES::TRAP_IN => {
+            TrapCodes::IN => {
                     print!("Enter a character: ");
                     io::stdout().flush().unwrap();
 
@@ -338,17 +365,17 @@ impl VM {
                     io::stdout().write_all(&[c.try_into().unwrap()]).unwrap();
                     io::stdout().flush().unwrap();
 
-                    self.reg[Register::R_R0 as usize] = c;
+                    self.reg[Register::R0 as usize] = c;
 
-                    self.update_flags(Register::R_R0 as usize);
+                    self.update_flags(Register::R0 as usize);
             }
-            TRAP_CODES::TRAP_GETC => {
+            TrapCodes::GETC => {
                 let mut buffer = [0; 1];
                 io::stdin().read_exact(&mut buffer).unwrap();
                 self.reg[0] = buffer[0] as u16;
-                self.update_flags(self.reg[0] as usize);
+                self.update_flags(Register::R0 as usize);
             }
-            TRAP_CODES::TRAP_PUTSP => {
+            TrapCodes::PUTSP => {
                 let mut i = self.reg[0];
                 while self.mem[i as usize] != 0x0000 {
                     let ch = self.mem[i as usize];
